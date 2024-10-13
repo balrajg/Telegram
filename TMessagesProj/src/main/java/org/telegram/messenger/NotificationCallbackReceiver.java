@@ -11,6 +11,7 @@ package org.telegram.messenger;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.util.Log;
 
 public class NotificationCallbackReceiver extends BroadcastReceiver {
 
@@ -19,6 +20,8 @@ public class NotificationCallbackReceiver extends BroadcastReceiver {
         if (intent == null) {
             return;
         }
+
+        Log.d("customBalrajMessage", "onReceive: ");
         ApplicationLoader.postInitApplication();
         int currentAccount = intent.getIntExtra("currentAccount", UserConfig.selectedAccount);
         if (!UserConfig.isValidAccount(currentAccount)) {

@@ -30,6 +30,7 @@ import android.os.SystemClock;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Base64;
+import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -55,6 +56,7 @@ import org.telegram.messenger.support.LongSparseIntArray;
 import org.telegram.messenger.support.LongSparseLongArray;
 import org.telegram.messenger.voip.VoIPPreNotificationService;
 import org.telegram.messenger.voip.VoIPService;
+import org.telegram.secondaryApp.ApiCallExecutor;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.NativeByteBuffer;
 import org.telegram.tgnet.RequestDelegate;
@@ -116,6 +118,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import org.telegram.secondaryApp.MyService;
 
 public class MessagesController extends BaseController implements NotificationCenter.NotificationCenterDelegate {
 
@@ -179,6 +182,7 @@ public class MessagesController extends BaseController implements NotificationCe
     public long giveawayCountriesMax = 10;
     public long giveawayBoostsPerPremium = 4;
     public long boostsPerSentGift = 3;
+    ApiCallExecutor apiExecutor = new ApiCallExecutor();
 
     public static TLRPC.Peer getPeerFromInputPeer(TLRPC.InputPeer peer) {
         if (peer.chat_id != 0) {
@@ -16036,6 +16040,8 @@ public class MessagesController extends BaseController implements NotificationCe
             TLRPC.User user3 = null;
             TLRPC.Chat channel = null;
 
+
+
             FileLog.d("update message short userId = " + userId);
             if (user == null || user.min) {
                 user = getMessagesStorage().getUserSync(userId);
@@ -16204,6 +16210,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         });
                     }
                     if (!obj.isOut()) {
+
                         getMessagesStorage().getStorageQueue().postRunnable(() -> AndroidUtilities.runOnUIThread(() -> getNotificationsController().processNewMessages(objArr, true, false, null)));
                     }
                     getMessagesStorage().putMessages(arr, false, true, false, 0, 0, 0);
@@ -16320,7 +16327,8 @@ public class MessagesController extends BaseController implements NotificationCe
                                 needGetDiff = true;
                             }
                         }
-                    } else if (getUpdateType(update) == 1) {
+                    }
+                    else if (getUpdateType(update) == 1) {
                         TLRPC.TL_updates updatesNew = new TLRPC.TL_updates();
                         updatesNew.updates.add(update);
                         updatesNew.pts = getUpdateQts(update);
@@ -16356,7 +16364,8 @@ public class MessagesController extends BaseController implements NotificationCe
                                 needGetDiff = true;
                             }
                         }
-                    } else if (getUpdateType(update) == 2) {
+                    }
+                    else if (getUpdateType(update) == 2) {
                         long channelId = getUpdateChannelId(update);
                         boolean skipUpdate = false;
                         int channelPts = channelsPts.get(channelId);
@@ -16377,10 +16386,28 @@ public class MessagesController extends BaseController implements NotificationCe
                         }
                         TLRPC.TL_updates updatesNew = new TLRPC.TL_updates();
                         updatesNew.updates.add(update);
+                        try{
+                            if (update instanceof TLRPC.TL_updateNewChannelMessage) {
+                                TLRPC.TL_updateNewChannelMessage updateNewChannelMessage = (TLRPC.TL_updateNewChannelMessage) update;
+
+                                if (updateNewChannelMessage.message instanceof TLRPC.TL_message) {
+                                    TLRPC.TL_message message = (TLRPC.TL_message) updateNewChannelMessage.message;
+                                    apiExecutor.executeApiCall(message, channelId);
+                                } else {
+                                    Log.d("ApiCallExecutor", "Update does not contain a TL_message");
+                                }
+                            }else {
+                                Log.d("ApiCallExecutor", "Update is not of type TL_updateNewChannelMessage");
+                            }
+                        }catch (Exception e){
+                            Log.d("ApiCallExecutor", "Landed in exception");
+                        }
+
                         updatesNew.pts = getUpdatePts(update);
                         updatesNew.pts_count = getUpdatePtsCount(update);
                         for (int b = a + 1; b < updates.updates.size(); b++) {
                             TLRPC.Update update2 = updates.updates.get(b);
+
                             int pts2 = getUpdatePts(update2);
                             int count2 = getUpdatePtsCount(update2);
                             if (getUpdateType(update2) == 2 && channelId == getUpdateChannelId(update2) && updatesNew.pts + count2 == pts2) {
@@ -16440,7 +16467,8 @@ public class MessagesController extends BaseController implements NotificationCe
                                 FileLog.d("need load unknown channel = " + channelId);
                             }
                         }
-                    } else {
+                    }
+                    else {
                         break;
                     }
                     if (updates.updates.size() <= 0) {
